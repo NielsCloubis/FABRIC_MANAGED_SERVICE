@@ -1,0 +1,291 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "type": "SetVariable",
+        "typeProperties": {
+          "variableName": "today",
+          "value": {
+            "value": "@formatDateTime(utcNow(), 'yyyy/MM/dd/')",
+            "type": "Expression"
+          }
+        },
+        "policy": {
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Get current date",
+        "description": "Get current date for date partition",
+        "dependsOn": []
+      },
+      {
+        "type": "Lookup",
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource",
+            "formatSettings": {
+              "type": "DelimitedTextReadSettings"
+            },
+            "storeSettings": {
+              "type": "LakehouseReadSettings",
+              "recursive": true,
+              "enablePartitionDiscovery": false
+            }
+          },
+          "datasetSettings": {
+            "type": "DelimitedText",
+            "typeProperties": {
+              "location": {
+                "type": "LakehouseLocation",
+                "folderPath": "reference_data/countries",
+                "fileName": "country.csv"
+              },
+              "columnDelimiter": ",",
+              "quoteChar": "\"",
+              "escapeChar": "\\",
+              "firstRowAsHeader": true
+            },
+            "schema": [],
+            "linkedService": {
+              "name": "lh_bronze",
+              "properties": {
+                "type": "Lakehouse",
+                "typeProperties": {
+                  "artifactId": "c1b27e1b-a51c-b869-4464-50a786590cc3",
+                  "workspaceId": "00000000-0000-0000-0000-000000000000",
+                  "rootFolder": "Files"
+                },
+                "annotations": []
+              }
+            },
+            "annotations": []
+          },
+          "firstRowOnly": false
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Get list of countries",
+        "description": "List of countries from a csv file. Make call for each country to API.",
+        "dependsOn": [
+          {
+            "activity": "Get current date",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "ForEach",
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Get list of countries').output.value",
+            "type": "Expression"
+          },
+          "activities": [
+            {
+              "type": "Copy",
+              "typeProperties": {
+                "source": {
+                  "type": "RestSource",
+                  "requestMethod": "GET",
+                  "paginationRules": {
+                    "supportRFC5988": "true"
+                  },
+                  "httpRequestTimeout": "00:01:40",
+                  "requestInterval": "00.00:00:00.010",
+                  "datasetSettings": {
+                    "type": "RestResource",
+                    "typeProperties": {
+                      "relativeUrl": {
+                        "value": "@concat('v3.1/name/',item().value)",
+                        "type": "Expression"
+                      }
+                    },
+                    "schema": [],
+                    "externalReferences": {
+                      "connection": "dd459e58-694e-4b65-a097-611d0a5b8af0"
+                    },
+                    "annotations": []
+                  }
+                },
+                "sink": {
+                  "type": "JsonSink",
+                  "formatSettings": {
+                    "type": "JsonWriteSettings"
+                  },
+                  "storeSettings": {
+                    "type": "AzureBlobStorageWriteSettings"
+                  },
+                  "datasetSettings": {
+                    "type": "Json",
+                    "typeProperties": {
+                      "location": {
+                        "type": "AzureBlobStorageLocation",
+                        "container": {
+                          "value": "@pipeline().parameters.source_type",
+                          "type": "Expression"
+                        },
+                        "folderPath": {
+                          "value": "@concat(pipeline().parameters.source,'/landing/', variables('today'))",
+                          "type": "Expression"
+                        },
+                        "fileName": {
+                          "value": "@concat(item().value, '.json')\n",
+                          "type": "Expression"
+                        }
+                      }
+                    },
+                    "schema": {},
+                    "linkedService": {
+                      "name": "lh_bronze",
+                      "properties": {
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "artifactId": "c1b27e1b-a51c-b869-4464-50a786590cc3",
+                          "workspaceId": "00000000-0000-0000-0000-000000000000",
+                          "rootFolder": "Files"
+                        },
+                        "annotations": []
+                      }
+                    },
+                    "annotations": []
+                  }
+                },
+                "enableStaging": false
+              },
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureInput": false,
+                "secureOutput": false
+              },
+              "name": "Response to json",
+              "description": "Write API response to json file",
+              "dependsOn": []
+            },
+            {
+              "type": "SetVariable",
+              "typeProperties": {
+                "variableName": "log",
+                "value": {
+                  "value": "@concat('{\"workspace_id\":','\"',pipeline().DataFactory,'\",','\"pipeline_id\":','\"',string(pipeline().Pipeline),'\",','\"run_id\":','\"',string(pipeline().RunId),'\",','\"output\":',string(activity('Response to json').output),'}')",
+                  "type": "Expression"
+                }
+              },
+              "policy": {
+                "secureInput": false,
+                "secureOutput": false
+              },
+              "name": "capture log",
+              "description": "TD later verder uitwerken.",
+              "state": "Inactive",
+              "onInactiveMarkAs": "Succeeded",
+              "dependsOn": [
+                {
+                  "activity": "Response to json",
+                  "dependencyConditions": [
+                    "Completed"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "name": "Make API call for country",
+        "dependsOn": [
+          {
+            "activity": "Get list of countries",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "TridentNotebook",
+        "typeProperties": {
+          "notebookId": "e144920f-4e12-88c2-45cd-1a0f9db0dc0e",
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "parameters": {
+            "date_partition": {
+              "value": {
+                "value": "@variables('today')",
+                "type": "Expression"
+              },
+              "type": "string"
+            },
+            "source": {
+              "value": {
+                "value": "@pipeline().parameters.source",
+                "type": "Expression"
+              },
+              "type": "string"
+            },
+            "target_lakehouse": {
+              "value": {
+                "value": "@pipeline().parameters.lakehouse",
+                "type": "Expression"
+              },
+              "type": "string"
+            }
+          }
+        },
+        "externalReferences": {
+          "connection": "976c2cb5-f139-40a7-a0f5-e6b2490a6eaf"
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Load to delta table",
+        "description": "Load all JSON files to delta table.",
+        "dependsOn": [
+          {
+            "activity": "Make API call for country",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      }
+    ],
+    "parameters": {
+      "lakehouse": {
+        "type": "string",
+        "defaultValue": "lh_bronze"
+      },
+      "source": {
+        "type": "string",
+        "defaultValue": "rest_countries"
+      },
+      "source_type": {
+        "type": "string",
+        "defaultValue": "api"
+      }
+    },
+    "variables": {
+      "today": {
+        "type": "String"
+      },
+      "run_id": {
+        "type": "String"
+      },
+      "test_waarde": {
+        "type": "String"
+      },
+      "log": {
+        "type": "String"
+      }
+    }
+  }
+}
