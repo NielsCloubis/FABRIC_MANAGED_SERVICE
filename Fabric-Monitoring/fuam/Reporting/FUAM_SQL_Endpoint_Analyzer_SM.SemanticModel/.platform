@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "FUAM_SQL_Endpoint_Analyzer_SM"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "261928d2-ef9a-bb91-4ed2-a978259bc10d"
+  }
+}
